@@ -15,19 +15,31 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten (käyttää uudempaa ja vakaampaa google-auth -kirjastoa)
+# Funktio Google Sheetsiin tallennusta varten (rakentaa PEM-avaimen täysin automaattisesti)
 def save_to_google_sheets(row_data):
   try:
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-
-    # Luodaan tunnukset suoraan Streamlit Secrets -sanakirjasta
     creds_dict = dict(st.secrets["gcp_service_account"])
 
-    # Korjataan private_key tarvittaessa oikeiksi rivinvaihdoiksi
-    if "private_key" in creds_dict:
-      creds_dict["private_key"] = creds_dict["private_key"].replace(
-          "\\n", "\n"
-      )
+    # Siivotaan private_key täysin puhtaaksi kaikista otsikoista ja välilyönneistä
+    raw_key = str(creds_dict["private_key"])
+    for tag in [
+        "-----BEGIN PRIVATE KEY-----",
+        "-----END PRIVATE KEY-----",
+        "\\n",
+        "\n",
+        "\r",
+        " ",
+    ]:
+      raw_key = raw_key.replace(tag, "")
+
+    # Muodostetaan puhtaasta sisällöstä standardin mukainen PEM-avain
+    formatted_chunks = [raw_key[i : i + 64] for i in range(0, len(raw_key), 64)]
+    creds_dict["private_key"] = (
+        "-----BEGIN PRIVATE KEY-----\n"
+        + "\n".join(formatted_chunks)
+        + "\n-----END PRIVATE KEY-----\n"
+    )
 
     credentials = Credentials.from_service_account_info(
         creds_dict, scopes=scopes
