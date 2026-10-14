@@ -15,7 +15,7 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten (korjaa automaattisesti private_keyn rivinvaihdot)
+# Funktio Google Sheetsiin tallennusta varten (korjaa PEM-avaimen rivinvaihdot täydellisesti)
 def save_to_google_sheets(row_data):
   try:
     scope = [
@@ -24,11 +24,11 @@ def save_to_google_sheets(row_data):
     ]
     creds_dict = dict(st.secrets["gcp_service_account"])
 
-    # Varmistetaan, että yksityisen avaimen rivinvaihdot ovat oikeassa muodossa
-    if "private_key" in creds_dict:
-      creds_dict["private_key"] = creds_dict["private_key"].replace(
-          "\\n", "\n"
-      )
+    # Muunnetaan kaikki mahdolliset tekstimuotoiset \n -merkit oikeiksi rivinvaihdoiksi
+    raw_key = creds_dict["private_key"]
+    if "\\n" in raw_key:
+      raw_key = raw_key.replace("\\n", "\n")
+    creds_dict["private_key"] = raw_key
 
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
