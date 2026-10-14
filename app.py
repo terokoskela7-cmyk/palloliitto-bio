@@ -827,25 +827,9 @@ def render_kr_result(res, pallo_id, age_group, month_name):
         )
 
 
-def render_instructions(is_mirwald):
-    st.divider()
-    st.header("📖 Ohjeet tuloksen tulkintaan")
+def render_mirwald_instructions():
     st.markdown(
         """
-**Näin tulos syntyy**
-
-1. Mittaa pelaajan pituus ja paino kaksi kertaa (Mirwald-menetelmässä myös istumapituus).
-   Sovellus laskee mittausten keskiarvot.
-2. Sovellus laskee pelaajan biologisen kypsyyden valitulla menetelmällä.
-3. Tulosta verrataan pelaajan **syntymäkuukautta** vastaavaan raja-arvoon.
-4. **KYLLÄ** = pelaaja täyttää yli-ikäisyyssäännön vaatimuksen.
-   **EI** = pelaaja ei täytä vaatimusta.
-"""
-    )
-
-    if is_mirwald:
-        st.markdown(
-            """
 **Mirwald-menetelmä**
 
 - **Maturity offset** kertoo, kuinka monta vuotta pelaajan kasvupyrähdyksen huippukohdasta
@@ -859,28 +843,30 @@ def render_instructions(is_mirwald):
   (oletus 40 cm) mittaustuloksesta. Jos mittaat istumapituuden suoraan ilman penkkiä,
   aseta penkin korkeudeksi 0.
 """
+    )
+    with st.expander("Mirwald: raja-arvot syntymäkuukauden mukaan (PHV-iän tulee ylittää arvo)"):
+        table = pd.DataFrame(
+            {
+                "Syntymäkuukausi": MONTHS_FI,
+                "Pojat": [f"{v:.2f}" for v in MIRWALD_LIMITS["Poika"]],
+                "Tytöt": [f"{v:.2f}" for v in MIRWALD_LIMITS["Tyttö"]],
+            }
         )
-        with st.expander("Raja-arvot syntymäkuukauden mukaan (PHV-iän tulee ylittää arvo)"):
-            table = pd.DataFrame(
-                {
-                    "Syntymäkuukausi": MONTHS_FI,
-                    "Pojat": [f"{v:.2f}" for v in MIRWALD_LIMITS["Poika"]],
-                    "Tytöt": [f"{v:.2f}" for v in MIRWALD_LIMITS["Tyttö"]],
-                }
-            )
-            st.dataframe(table, hide_index=True)
-        with st.expander("Esimerkit"):
-            st.markdown(
-                """
+        st.dataframe(table, hide_index=True)
+    with st.expander("Mirwald: esimerkit"):
+        st.markdown(
+            """
 - Poika, syntymäkuukausi syyskuu, PHV-ikä 14,6 → raja-arvo 14,30 → **KYLLÄ**
 - Poika, syntymäkuukausi tammikuu, PHV-ikä 14,5 → raja-arvo 14,97 → **EI**
 - Tyttö, syntymäkuukausi huhtikuu, PHV-ikä 12,2 → raja-arvo 12,82 → **EI**
 - Tyttö, syntymäkuukausi lokakuu, PHV-ikä 12,5 → raja-arvo 12,32 → **KYLLÄ**
 """
-            )
-    else:
-        st.markdown(
-            """
+        )
+
+
+def render_kr_instructions():
+    st.markdown(
+        """
 **Khamis-Roche-menetelmä**
 
 - **PAH** (Predicted Adult Height) on ennustettu aikuispituus. Se lasketaan pelaajan pituudesta,
@@ -898,25 +884,54 @@ def render_instructions(is_mirwald):
   raja-arvo.
 - **Vanhempien pituudet:** syötä biologisten vanhempien pituudet senttimetreinä.
 """
+    )
+    with st.expander(
+        "Khamis-Roche: raja-arvot ikäryhmän ja syntymäkuukauden mukaan (biologisen iän tulee alittaa arvo)"
+    ):
+        st.caption("Arvo = ikäryhmän keskimääräinen kronologinen ikä vähennettynä 0,75 vuodella.")
+        table = pd.DataFrame(
+            {
+                "Syntymäkuukausi": MONTHS_FI,
+                "13v": [f"{v:.2f}" for v in KR_LIMITS[13]],
+                "14v": [f"{v:.2f}" for v in KR_LIMITS[14]],
+                "15v": [f"{v:.2f}" for v in KR_LIMITS[15]],
+            }
         )
-        with st.expander("Raja-arvot ikäryhmän ja syntymäkuukauden mukaan (biologisen iän tulee alittaa arvo)"):
-            st.caption("Arvo = ikäryhmän keskimääräinen kronologinen ikä vähennettynä 0,75 vuodella.")
-            table = pd.DataFrame(
-                {
-                    "Syntymäkuukausi": MONTHS_FI,
-                    "13v": [f"{v:.2f}" for v in KR_LIMITS[13]],
-                    "14v": [f"{v:.2f}" for v in KR_LIMITS[14]],
-                    "15v": [f"{v:.2f}" for v in KR_LIMITS[15]],
-                }
-            )
-            st.dataframe(table, hide_index=True)
-        with st.expander("Esimerkit"):
-            st.markdown(
-                """
+        st.dataframe(table, hide_index=True)
+    with st.expander("Khamis-Roche: esimerkit"):
+        st.markdown(
+            """
 - Syntymäkuukausi syyskuu, ikäryhmä 13v, biologinen ikä 13,0 → raja-arvo 12,48 → **EI**
 - Syntymäkuukausi tammikuu, ikäryhmä 14v, biologinen ikä 12,6 → raja-arvo 12,75 → **KYLLÄ**
 """
-            )
+        )
+
+
+def render_instructions(is_mirwald):
+    st.divider()
+    st.header("📖 Ohjeet tuloksen tulkintaan")
+    st.markdown(
+        """
+**Näin tulos syntyy**
+
+1. Mittaa pelaajan pituus ja paino kaksi kertaa (Mirwald-menetelmässä myös istumapituus).
+   Sovellus laskee mittausten keskiarvot.
+2. Sovellus laskee pelaajan biologisen kypsyyden valitulla menetelmällä.
+3. Tulosta verrataan pelaajan **syntymäkuukautta** vastaavaan raja-arvoon.
+4. **KYLLÄ** = pelaaja täyttää yli-ikäisyyssäännön vaatimuksen.
+   **EI** = pelaaja ei täytä vaatimusta.
+"""
+    )
+
+    # Molempien menetelmien ohjeet ovat aina näkyvissä; valittu menetelmä on ensimmäisenä.
+    if is_mirwald:
+        tab_mirwald, tab_kr = st.tabs(["Mirwald", "Khamis-Roche"])
+    else:
+        tab_kr, tab_mirwald = st.tabs(["Khamis-Roche", "Mirwald"])
+    with tab_mirwald:
+        render_mirwald_instructions()
+    with tab_kr:
+        render_kr_instructions()
 
     st.markdown(
         """
