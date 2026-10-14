@@ -1,6 +1,6 @@
 import datetime
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 import pandas as pd
 import streamlit as st
 
@@ -15,42 +15,25 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten (pakottaa kaiken puhtaaksi ASCII-tekstiksi)
+# Funktio Google Sheetsiin tallennusta varten (käyttää uudempaa ja vakaampaa google-auth -kirjastoa)
 def save_to_google_sheets(row_data):
   try:
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.auth.googleapis.com/auth/drive",
-    ]
-    # Haetaan salaisuudet ja varmistetaan että arvot ovat puhtaita merkkijonoja
-    raw_secrets = st.secrets["gcp_service_account"]
-    creds_dict = {
-        str(k): str(v).encode("ascii", "ignore").decode("ascii")
-        for k, v in raw_secrets.items()
-    }
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 
-    # Siivotaan avain täysin puhtaaksi
-    key = creds_dict["private_key"]
-    for prefix in [
-        "-----BEGIN PRIVATE KEY-----",
-        "-----END PRIVATE KEY-----",
-        "\\n",
-        "\n",
-        "\r",
-        " ",
-    ]:
-      key = key.replace(prefix, "")
+    # Luodaan tunnukset suoraan Streamlit Secrets -sanakirjasta
+    creds_dict = dict(st.secrets["gcp_service_account"])
 
-    # Pilkotaan puhtaat merkit 64 merkin riveihin
-    formatted_chunks = [key[i : i + 64] for i in range(0, len(key), 64)]
-    creds_dict["private_key"] = (
-        "-----BEGIN PRIVATE KEY-----\n"
-        + "\n".join(formatted_chunks)
-        + "\n-----END PRIVATE KEY-----\n"
+    # Korjataan private_key tarvittaessa oikeiksi rivinvaihdoiksi
+    if "private_key" in creds_dict:
+      creds_dict["private_key"] = creds_dict["private_key"].replace(
+          "\\n", "\n"
+      )
+
+    credentials = Credentials.from_service_account_info(
+        creds_dict, scopes=scopes
     )
+    client = gspread.authorize(credentials)
 
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
     sheet = client.open("Palloliitto Bio Tulokset").sheet1
     sheet.append_row(row_data)
     return True, None
