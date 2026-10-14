@@ -1,4 +1,5 @@
 import datetime
+import json
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
@@ -15,37 +16,17 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten (noudattaa cryptography.io 64 merkin sääntöä)
+# Funktio Google Sheetsiin tallennusta varten (lukee JSON-merkkijonon sellaisenaan)
 def save_to_google_sheets(row_data):
   try:
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds_dict = dict(st.secrets["gcp_service_account"])
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
 
-    # Siivotaan avaimesta otsikot, rivinvaihdot ja välilyönnit (mutta SÄILYTETÄÄN base64-täytteet "=")
-    raw_key = str(creds_dict["private_key"])
-    for tag in [
-        "-----BEGIN PRIVATE KEY-----",
-        "-----END PRIVATE KEY-----",
-        "\\n",
-        "\n",
-        "\r",
-        " ",
-    ]:
-      raw_key = raw_key.replace(tag, "")
-
-    # Pilkotaan avain tasan 64 merkin riveihin (paitsi viimeinen rivi voi olla lyhyempi)
-    chunks = [raw_key[i : i + 64] for i in range(0, len(raw_key), 64)]
-
-    # Kootaan PEM-muotoon dokumentaation vaatimusten mukaisesti
-    creds_dict["private_key"] = (
-        "-----BEGIN PRIVATE KEY-----\n"
-        + "\n".join(chunks)
-        + "\n-----END PRIVATE KEY-----\n"
-    )
-
-    credentials = Credentials.from_service_account_info(
-        creds_dict, scopes=scopes
-    )
+    # Puretaan Secretsistä yhtenäinen JSON-merkkijono sanakirjaksi
+    info = json.loads(st.secrets["GCP_SERVICE_ACCOUNT"])
+    credentials = Credentials.from_service_account_info(info, scopes=scopes)
     client = gspread.authorize(credentials)
 
     sheet = client.open("Palloliitto Bio Tulokset").sheet1
