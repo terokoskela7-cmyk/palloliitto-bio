@@ -15,7 +15,7 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten (korjaa PEM-avaimen rivinvaihdot täydellisesti)
+# Funktio Google Sheetsiin tallennusta varten (muotoilee avaimen aina oikein)
 def save_to_google_sheets(row_data):
   try:
     scope = [
@@ -24,11 +24,23 @@ def save_to_google_sheets(row_data):
     ]
     creds_dict = dict(st.secrets["gcp_service_account"])
 
-    # Muunnetaan kaikki mahdolliset tekstimuotoiset \n -merkit oikeiksi rivinvaihdoiksi
-    raw_key = creds_dict["private_key"]
-    if "\\n" in raw_key:
-      raw_key = raw_key.replace("\\n", "\n")
-    creds_dict["private_key"] = raw_key
+    # Siivotaan ja muotoillaan avain automaattisesti oikeaan PEM-muotoon
+    key = creds_dict["private_key"]
+    key = (
+        key.replace("-----BEGIN PRIVATE KEY-----", "")
+        .replace("-----END PRIVATE KEY-----", "")
+        .replace("\\n", "")
+        .replace("\n", "")
+        .replace(" ", "")
+    )
+
+    # Pilkotaan avain tasaisiksi 64 merkin paloiksi
+    formatted_chunks = [key[i : i + 64] for i in range(0, len(key), 64)]
+    creds_dict["private_key"] = (
+        "-----BEGIN PRIVATE KEY-----\n"
+        + "\n".join(formatted_chunks)
+        + "\n-----END PRIVATE KEY-----\n"
+    )
 
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
