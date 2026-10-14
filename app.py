@@ -15,35 +15,39 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten (puhdistaa avaimen varmasti kaikesta ylimääräisestä)
+# Funktio Google Sheetsiin tallennusta varten (pakottaa kaiken puhtaaksi ASCII-tekstiksi)
 def save_to_google_sheets(row_data):
   try:
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.auth.googleapis.com/auth/drive",
     ]
-    creds_dict = dict(st.secrets["gcp_service_account"])
+    # Haetaan salaisuudet ja varmistetaan että arvot ovat puhtaita merkkijonoja
+    raw_secrets = st.secrets["gcp_service_account"]
+    creds_dict = {
+        str(k): str(v).encode("ascii", "ignore").decode("ascii")
+        for k, v in raw_secrets.items()
+    }
 
-    # Otetaan private_key ja varmistetaan että se on pelkkää ASCII-tekstiä
-    key = str(creds_dict["private_key"])
-    # Poistetaan mahdolliset otsikot, rivinvaihdot ja välilyönnit
-    key = (
-        key.replace("-----BEGIN PRIVATE KEY-----", "")
-        .replace("-----END PRIVATE KEY-----", "")
-        .replace("\\n", "")
-        .replace("\n", "")
-        .replace(" ", "")
-    )
+    # Siivotaan avain täysin puhtaaksi
+    key = creds_dict["private_key"]
+    for prefix in [
+        "-----BEGIN PRIVATE KEY-----",
+        "-----END PRIVATE KEY-----",
+        "\\n",
+        "\n",
+        "\r",
+        " ",
+    ]:
+      key = key.replace(prefix, "")
 
-    # Pilkotaan 64 merkin riveihin
+    # Pilkotaan puhtaat merkit 64 merkin riveihin
     formatted_chunks = [key[i : i + 64] for i in range(0, len(key), 64)]
-    clean_key = (
+    creds_dict["private_key"] = (
         "-----BEGIN PRIVATE KEY-----\n"
         + "\n".join(formatted_chunks)
         + "\n-----END PRIVATE KEY-----\n"
     )
-
-    creds_dict["private_key"] = clean_key
 
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
