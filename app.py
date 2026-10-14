@@ -15,7 +15,7 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten (näyttää virheen, jos epäonnistuu)
+# Funktio Google Sheetsiin tallennusta varten (korjaa automaattisesti private_keyn rivinvaihdot)
 def save_to_google_sheets(row_data):
   try:
     scope = [
@@ -23,6 +23,13 @@ def save_to_google_sheets(row_data):
         "https://www.auth.googleapis.com/auth/drive",
     ]
     creds_dict = dict(st.secrets["gcp_service_account"])
+
+    # Varmistetaan, että yksityisen avaimen rivinvaihdot ovat oikeassa muodossa
+    if "private_key" in creds_dict:
+      creds_dict["private_key"] = creds_dict["private_key"].replace(
+          "\\n", "\n"
+      )
+
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     sheet = client.open("Palloliitto Bio Tulokset").sheet1
@@ -282,7 +289,6 @@ if submitted:
           eligibility_kr_str,
       ]
 
-    # Yritetään tallentaa ja katsotaan mitä virhe sanoo, jos ei onnistu
     sheets_success, error_message = save_to_google_sheets(row_to_save)
     if sheets_success:
       st.success("Tiedot tallennettu onnistuneesti Google Sheets -taulukkoon!")
