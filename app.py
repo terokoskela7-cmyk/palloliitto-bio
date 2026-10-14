@@ -15,7 +15,7 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten
+# Funktio Google Sheetsiin tallennusta varten (näyttää virheen, jos epäonnistuu)
 def save_to_google_sheets(row_data):
   try:
     scope = [
@@ -27,9 +27,9 @@ def save_to_google_sheets(row_data):
     client = gspread.authorize(creds)
     sheet = client.open("Palloliitto Bio Tulokset").sheet1
     sheet.append_row(row_data)
-    return True
+    return True, None
   except Exception as e:
-    return False
+    return False, str(e)
 
 
 test_type = st.radio(
@@ -111,8 +111,6 @@ if submitted:
     age = (dom - dob).days / 365.25
     gender_num = 1 if gender == "Poika" else 2
     birth_month = dob.month
-
-    # Muunnetaan päivämäärät suomalaiseen muotoon (pp.kk.vvvv) tallennusta varten
     dom_fi = dom.strftime("%d.%m.%Y")
 
     if "Mirwald" in test_type:
@@ -284,9 +282,11 @@ if submitted:
           eligibility_kr_str,
       ]
 
-    # Tallennetaan Google Sheetsiin
-    sheets_success = save_to_google_sheets(row_to_save)
+    # Yritetään tallentaa ja katsotaan mitä virhe sanoo, jos ei onnistu
+    sheets_success, error_message = save_to_google_sheets(row_to_save)
     if sheets_success:
       st.success("Tiedot tallennettu onnistuneesti Google Sheets -taulukkoon!")
     else:
-      st.info("Tulokset laskettu.")
+      st.error(
+          f"Tallennus Google Sheetsiin epäonnistui. Virhe: {error_message}"
+      )
