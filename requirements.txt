@@ -1,5 +1,4 @@
 streamlit
 pandas
-gspread
-google-auth
 gspread>=6.1.0
+google-auth
