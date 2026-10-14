@@ -9,6 +9,7 @@ Laskenta noudattaa Palloliiton Excel-työkaluja:
 import datetime
 import json
 import math
+import re
 import traceback
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -22,6 +23,9 @@ SHEET_NAME = "Palloliitto Bio Tulokset"
 # Sarakkeet, jotka sovellus tallentaa Google Sheetsiin (taulukon rivin 1 otsikot).
 SHEET_HEADERS = [
     "Pvm",
+    "Seura",
+    "Testaaja",
+    "Testaajan sähköposti",
     "Metodi",
     "PalloID",
     "Sukupuoli",
@@ -35,7 +39,12 @@ SHEET_HEADERS = [
     "PHV-ikä / Bio-ikä",
     "Raja-arvo",
     "Pelioikeus",
+    "Mittaus voimassa asti",
 ]
+
+# Palloliiton ohje: biologisen iän mittaustulos on voimassa 6 kuukautta mittauspäivästä.
+VALIDITY_MONTHS = 6
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # Penkin korkeus, jonka Excel vähentää istumapituusmittauksesta (Mirwald).
 DEFAULT_BENCH_HEIGHT_CM = 40.0
@@ -518,6 +527,7 @@ _SWE_REF_GIRLS_RAW = [
 ]
 
 
+
 def _build_kr_coeffs(raw_rows):
     """Muuntaa Excelin imperial-kertoimet cm/kg-yksiköihin (kuten Excel)."""
     return {
@@ -733,6 +743,22 @@ def load_credentials_info():
     raise KeyError("Secretsistä puuttuu 'gcp_service_account' tai 'GCP_SERVICE_ACCOUNT'.")
 
 
+def add_months(d, months):
+    """Lisää päivämäärään kalenterikuukausia (kuukauden lopussa päivä rajataan)."""
+    idx = d.year * 12 + (d.month - 1) + months
+    year, month = divmod(idx, 12)
+    month += 1
+    last_day = (datetime.date(year + (month == 12), month % 12 + 1, 1) - datetime.timedelta(days=1)).day
+    return datetime.date(year, month, min(d.day, last_day))
+
+
+def sheet_safe(value):
+    """Estää kaavainjektion: tekstin alussa oleva = + - @ muutetaan tekstiksi."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+        return "'" + value
+    return value
+
+
 def save_to_google_sheets(row_data):
     """Tallentaa rivin taulukkoon. Palauttaa (onnistui, virhe, varoitus)."""
     try:
@@ -944,6 +970,27 @@ def render_instructions(is_mirwald):
     )
 
 
+def render_history():
+    """Seuran omat tulokset: istunnon mittaukset ladattavana tiedostona."""
+    history = st.session_state.get("history", [])
+    if not history:
+        return
+    st.subheader("Seuran omat tulokset (tämä istunto)")
+    st.caption(
+        "Lataa tulokset omaan käyttöön ja säilytä ne seuran järjestelmässä. Lista tyhjenee, kun sivu ladataan "
+        "uudelleen tai istunto päättyy."
+    )
+    df = pd.DataFrame(history)
+    st.dataframe(df, hide_index=True)
+    csv = df.to_csv(index=False, sep=";").encode("utf-8-sig")  # ; ja BOM: aukeaa suoraan suomalaisessa Excelissä
+    st.download_button(
+        "Lataa tulokset (CSV)",
+        data=csv,
+        file_name=f"palloliitto_bio_{datetime.date.today().isoformat()}.csv",
+        mime="text/csv",
+    )
+
+
 def main():
     st.set_page_config(page_title="Palloliitto Bio", page_icon="⚽", layout="centered")
 
@@ -951,7 +998,8 @@ def main():
     st.write(
         "Valitse testausmenetelmä, syötä pelaajan 8-numeroinen PalloID, syntymäaika ja kaksi "
         "mittausta kustakin mitasta. Sovellus laskee keskiarvot ja tarkistaa yli-ikäisyyssäännön "
-        "automaattisesti."
+        "automaattisesti. Tulos ilmoitetaan samalla Palloliitolle, ja seura voi ladata omat tuloksensa "
+        "sivun alalaidasta."
     )
 
     test_type = st.radio(
@@ -964,7 +1012,15 @@ def main():
     is_mirwald = "Mirwald" in test_type
 
     with st.form("bio_form"):
-        st.subheader("1. Pelaajan tunnistetiedot")
+        st.subheader("1. Seuran ja testaajan tiedot")
+        club = st.text_input("Seura", placeholder="Esim. FC Kontu")
+        ccol1, ccol2 = st.columns(2)
+        with ccol1:
+            tester_name = st.text_input("Testaajan nimi")
+        with ccol2:
+            tester_email = st.text_input("Testaajan sähköposti")
+
+        st.subheader("2. Pelaajan tunnistetiedot")
         col1, col2 = st.columns(2)
         with col1:
             pallo_id = st.text_input("PalloID (8 numeroa)", max_chars=8, placeholder="Esim. 12345678")
@@ -979,7 +1035,7 @@ def main():
             )
             dom = st.date_input("Mittauspäivä", value=datetime.date.today(), format="DD.MM.YYYY")
 
-        st.subheader("2. Mittaukset")
+        st.subheader("3. Mittaukset")
         st.caption("Mittaa jokainen mitta kaksi kertaa. Sovellus käyttää mittausten keskiarvoa.")
         mcol1, mcol2 = st.columns(2)
         with mcol1:
@@ -1035,7 +1091,14 @@ def main():
 
     if submitted:
         pallo_id = pallo_id.strip()
-        if not pallo_id or len(pallo_id) != 8 or not pallo_id.isdigit():
+        club = club.strip()
+        tester_name = tester_name.strip()
+        tester_email = tester_email.strip()
+        if not club or not tester_name:
+            st.warning("Syötä seura ja testaajan nimi.")
+        elif not EMAIL_RE.match(tester_email):
+            st.warning("Syötä testaajan sähköposti oikeassa muodossa (esim. nimi@seura.fi).")
+        elif not pallo_id or len(pallo_id) != 8 or not pallo_id.isdigit():
             st.warning("Syötä kelvollinen 8-numeroinen PalloID.")
         elif dom <= dob:
             st.warning("Mittauspäivän tulee olla syntymäajan jälkeen.")
@@ -1093,30 +1156,62 @@ def main():
                     details.append(("Raja-arvo (v)", f"{res['limit']:.2f}"))
                     st.table(pd.DataFrame(details, columns=["Suure", "Arvo"]).set_index("Suure"))
 
-                row_to_save = [
-                    dom.strftime("%d.%m.%Y"),
-                    "Mirwald" if is_mirwald else "Khamis-Roche",
-                    "'" + pallo_id,  # heittomerkki säilyttää mahdollisen etunollan tekstinä
-                    gender,
-                    dob.month,
-                    "" if is_mirwald else kr_group,
-                    round(res["age"], 2),
-                    round(res["height"], 2),
-                    round(res["weight"], 2),
-                    round(res["sitting_height"], 2) if is_mirwald else "",
-                    round(res["bench"], 1) if is_mirwald else "",
-                    round(res["phv_age"] if is_mirwald else res["bio_age"], 2),
-                    round(res["limit"], 2),
-                    res["result"],
-                ]
+                valid_until = add_months(dom, VALIDITY_MONTHS) if res["eligible"] else None
+                record = {
+                    "Pvm": dom.strftime("%d.%m.%Y"),
+                    "Seura": club,
+                    "Testaaja": tester_name,
+                    "Testaajan sähköposti": tester_email,
+                    "Metodi": "Mirwald" if is_mirwald else "Khamis-Roche",
+                    "PalloID": pallo_id,
+                    "Sukupuoli": gender,
+                    "Syntymäkuukausi": dob.month,
+                    "Ikäryhmä (K-R)": "" if is_mirwald else kr_group,
+                    "Ikä": round(res["age"], 2),
+                    "Pituus ka (cm)": round(res["height"], 2),
+                    "Paino ka (kg)": round(res["weight"], 2),
+                    "Istumapituus ka (cm)": round(res["sitting_height"], 2) if is_mirwald else "",
+                    "Penkin korkeus (cm)": round(res["bench"], 1) if is_mirwald else "",
+                    "PHV-ikä / Bio-ikä": round(res["phv_age"] if is_mirwald else res["bio_age"], 2),
+                    "Raja-arvo": round(res["limit"], 2),
+                    "Pelioikeus": res["result"],
+                    "Mittaus voimassa asti": valid_until.strftime("%d.%m.%Y") if valid_until else "",
+                }
+                row_to_save = []
+                for header in SHEET_HEADERS:
+                    value = record[header]
+                    if header == "PalloID":
+                        value = "'" + value  # heittomerkki säilyttää etunollat tekstinä
+                    row_to_save.append(sheet_safe(value))
+
                 ok, error_message, warning = save_to_google_sheets(row_to_save)
                 if ok:
-                    st.success("Tiedot tallennettu onnistuneesti Google Sheets -taulukkoon!")
+                    st.success("Tulos on ilmoitettu Palloliitolle ja tallennettu.")
                     if warning:
                         st.warning(warning)
                 else:
-                    st.error("Tallennus Google Sheetsiin epäonnistui.")
+                    st.error(
+                        "Ilmoitus Palloliitolle (tallennus Google Sheetsiin) epäonnistui. "
+                        "Lataa tulos omaan käyttöön alta ja yritä myöhemmin uudelleen."
+                    )
                     st.code(error_message)
+
+                if res["eligible"]:
+                    st.info(
+                        f"**Mittaustulos on voimassa {VALIDITY_MONTHS} kuukautta mittauspäivästä, "
+                        f"eli {valid_until.strftime('%d.%m.%Y')} asti.** Seura vastaa siitä, että voimassa oleva "
+                        "mittaustulos on käytettävissä koko pelioikeuden voimassaolon ajan ja että uusi mittaus "
+                        "tehdään tarvittaessa ennen voimassaoloajan päättymistä."
+                    )
+                else:
+                    st.caption("Pelioikeutta ei synny tämän mittauksen perusteella, joten voimassaoloaikaa ei ole.")
+
+                history = st.session_state.setdefault("history", [])
+                record_view = dict(record)
+                record_view["Ilmoitus Palloliitolle"] = "Lähetetty" if ok else "EI lähetetty"
+                history.append(record_view)
+
+    render_history()
 
     render_instructions(is_mirwald)
 
