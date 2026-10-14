@@ -15,13 +15,13 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten (rakentaa PEM-avaimen täysin automaattisesti)
+# Funktio Google Sheetsiin tallennusta varten (noudattaa cryptography.io 64 merkin sääntöä)
 def save_to_google_sheets(row_data):
   try:
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds_dict = dict(st.secrets["gcp_service_account"])
 
-    # Siivotaan private_key täysin puhtaaksi kaikista otsikoista ja välilyönneistä
+    # Siivotaan avaimesta otsikot, rivinvaihdot ja välilyönnit (mutta SÄILYTETÄÄN base64-täytteet "=")
     raw_key = str(creds_dict["private_key"])
     for tag in [
         "-----BEGIN PRIVATE KEY-----",
@@ -33,11 +33,13 @@ def save_to_google_sheets(row_data):
     ]:
       raw_key = raw_key.replace(tag, "")
 
-    # Muodostetaan puhtaasta sisällöstä standardin mukainen PEM-avain
-    formatted_chunks = [raw_key[i : i + 64] for i in range(0, len(raw_key), 64)]
+    # Pilkotaan avain tasan 64 merkin riveihin (paitsi viimeinen rivi voi olla lyhyempi)
+    chunks = [raw_key[i : i + 64] for i in range(0, len(raw_key), 64)]
+
+    # Kootaan PEM-muotoon dokumentaation vaatimusten mukaisesti
     creds_dict["private_key"] = (
         "-----BEGIN PRIVATE KEY-----\n"
-        + "\n".join(formatted_chunks)
+        + "\n".join(chunks)
         + "\n-----END PRIVATE KEY-----\n"
     )
 
