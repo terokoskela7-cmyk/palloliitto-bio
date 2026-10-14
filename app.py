@@ -1,5 +1,4 @@
 import datetime
-import json
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
@@ -16,7 +15,7 @@ st.write(
 )
 
 
-# Funktio Google Sheetsiin tallennusta varten (lukee JSON-merkkijonon sellaisenaan)
+# Funktio Google Sheetsiin tallennusta varten
 def save_to_google_sheets(row_data):
   try:
     scopes = [
@@ -24,9 +23,12 @@ def save_to_google_sheets(row_data):
         "https://www.googleapis.com/auth/drive",
     ]
 
-    # Puretaan Secretsistä yhtenäinen JSON-merkkijono sanakirjaksi
-    info = json.loads(st.secrets["GCP_SERVICE_ACCOUNT"])
-    credentials = Credentials.from_service_account_info(info, scopes=scopes)
+    # Luetaan suoraan st.secrets-taulukosta
+    creds_dict = dict(st.secrets["gcp_service_account"])
+
+    credentials = Credentials.from_service_account_info(
+        creds_dict, scopes=scopes
+    )
     client = gspread.authorize(credentials)
 
     sheet = client.open("Palloliitto Bio Tulokset").sheet1
