@@ -6,8 +6,10 @@ Laskenta noudattaa Palloliiton Excel-työkaluja:
   * "Khamis_Roche_NEW_1" (Khamis-Roche-kertoimet ja ruotsalainen viiteaineisto)
 """
 
+import base64
 import datetime
 import json
+import os
 import math
 import re
 import traceback
@@ -970,6 +972,69 @@ def render_instructions(is_mirwald):
     )
 
 
+HERO_IMAGE_NAMES = ("hero.jpg", "hero.jpeg", "hero.png", "hero.webp")
+HERO_MIME = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+
+
+def hero_image_css():
+    """Palauttaa taustakuvan CSS:n, jos repossa on hero.jpg/.png/.webp app.py:n vieressä."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    for name in HERO_IMAGE_NAMES:
+        path = os.path.join(base_dir, name)
+        if os.path.isfile(path):
+            try:
+                with open(path, "rb") as f:
+                    encoded = base64.b64encode(f.read()).decode("ascii")
+            except OSError:
+                return None
+            mime = HERO_MIME[name.rsplit(".", 1)[1]]
+            return f"url(data:{mime};base64,{encoded})"
+    return None
+
+
+def render_hero():
+    """Sivun yläosan banneri: sininen sävytetty taustakuva (tai pelkkä sininen tausta) ja otsikko."""
+    image = hero_image_css()
+    overlay = "linear-gradient(rgba(8, 48, 140, 0.84), rgba(8, 48, 140, 0.84))"
+    background = f"{overlay}, {image} center / cover" if image else "linear-gradient(135deg, #0b3a96, #06246b)"
+    st.markdown(
+        f"""
+        <style>
+        .pb-hero {{
+            background: {background};
+            border-radius: 14px;
+            padding: 44px 20px 36px 20px;
+            margin-bottom: 1.2rem;
+            text-align: center;
+            color: #ffffff;
+        }}
+        .pb-hero-title {{
+            font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+            font-style: italic;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            font-size: clamp(1.6rem, 6vw, 2.6rem);
+            line-height: 1.1;
+            margin: 0;
+        }}
+        .pb-hero-title span {{ color: #f2a99b; }}
+        .pb-hero-sub {{
+            font-size: clamp(0.95rem, 2.6vw, 1.15rem);
+            margin: 14px auto 0 auto;
+            max-width: 560px;
+            opacity: 0.95;
+        }}
+        </style>
+        <div class="pb-hero">
+            <div class="pb-hero-title">Biologinen ikä <span>&amp; pelioikeus</span></div>
+            <div class="pb-hero-sub">Palloliiton yli-ikäisyyssäännön tarkistus ja ilmoitus Palloliitolle</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_history():
     """Seuran omat tulokset: istunnon mittaukset ladattavana tiedostona."""
     history = st.session_state.get("history", [])
@@ -994,7 +1059,7 @@ def render_history():
 def main():
     st.set_page_config(page_title="Palloliitto Bio", page_icon="⚽", layout="centered")
 
-    st.title("⚽ Palloliitto Bio — PalloID & Pelioikeus")
+    render_hero()
     st.write(
         "Valitse testausmenetelmä, syötä pelaajan 8-numeroinen PalloID, syntymäaika ja kaksi "
         "mittausta kustakin mitasta. Sovellus laskee keskiarvot ja tarkistaa yli-ikäisyyssäännön "
