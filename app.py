@@ -1249,17 +1249,28 @@ def main():
                         value = "'" + value  # heittomerkki säilyttää etunollat tekstinä
                     row_to_save.append(sheet_safe(value))
 
-                ok, error_message, warning = save_to_google_sheets(row_to_save)
-                if ok:
-                    st.success("Tulos on ilmoitettu Palloliitolle ja tallennettu.")
-                    if warning:
-                        st.warning(warning)
-                else:
-                    st.error(
-                        "Ilmoitus Palloliitolle (tallennus Google Sheetsiin) epäonnistui. "
-                        "Lataa tulos omaan käyttöön alta ja yritä myöhemmin uudelleen."
+                record_key = tuple(str(record[h]) for h in SHEET_HEADERS)
+                sent_keys = st.session_state.setdefault("sent_keys", set())
+                already_sent = record_key in sent_keys
+                ok = True
+                if already_sent:
+                    st.info(
+                        "Tämä mittaus on jo ilmoitettu Palloliitolle, eikä sitä tallenneta uudelleen. "
+                        "Jos mittaat pelaajan uudelleen, syötä uudet mittaustulokset."
                     )
-                    st.code(error_message)
+                else:
+                    ok, error_message, warning = save_to_google_sheets(row_to_save)
+                    if ok:
+                        sent_keys.add(record_key)
+                        st.success("Tulos on ilmoitettu Palloliitolle ja tallennettu.")
+                        if warning:
+                            st.warning(warning)
+                    else:
+                        st.error(
+                            "Ilmoitus Palloliitolle (tallennus Google Sheetsiin) epäonnistui. "
+                            "Lataa tulos omaan käyttöön alta ja yritä myöhemmin uudelleen."
+                        )
+                        st.code(error_message)
 
                 if res["eligible"]:
                     st.info(
@@ -1271,10 +1282,11 @@ def main():
                 else:
                     st.caption("Pelioikeutta ei synny tämän mittauksen perusteella, joten voimassaoloaikaa ei ole.")
 
-                history = st.session_state.setdefault("history", [])
-                record_view = dict(record)
-                record_view["Ilmoitus Palloliitolle"] = "Lähetetty" if ok else "EI lähetetty"
-                history.append(record_view)
+                if not already_sent:
+                    history = st.session_state.setdefault("history", [])
+                    record_view = dict(record)
+                    record_view["Ilmoitus Palloliitolle"] = "Lähetetty" if ok else "EI lähetetty"
+                    history.append(record_view)
 
     render_history()
 
