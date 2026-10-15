@@ -1078,7 +1078,7 @@ def main():
 
     with st.form("bio_form"):
         st.subheader("1. Seuran ja testaajan tiedot")
-        club = st.text_input("Seura", placeholder="Esim. FC Kontu")
+        club = st.text_input("Seura")
         ccol1, ccol2 = st.columns(2)
         with ccol1:
             tester_name = st.text_input("Testaajan nimi")
