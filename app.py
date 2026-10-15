@@ -23,7 +23,7 @@ from google.oauth2.service_account import Credentials
 SHEET_NAME = "Palloliitto Bio Tulokset"
 
 # Sarakkeet, jotka sovellus tallentaa Google Sheetsiin (taulukon rivin 1 otsikot).
-SHEET_HEADERS = [
+FULL_HEADERS = [
     "Pvm",
     "Seura",
     "Testaaja",
@@ -43,6 +43,37 @@ SHEET_HEADERS = [
     "Pelioikeus",
     "Mittaus voimassa asti",
 ]
+
+# Tietosuoja: Palloliiton Google Sheets -taulukkoon tallennetaan vain ilmoituksen kannalta tarpeelliset tiedot.
+# Mitat, sukupuoli, syntymäkuukausi, ikä, PHV-/biologinen ikä ja raja-arvo näkyvät vain ruudulla ja
+# seuran omassa CSV-latauksessa (FULL_HEADERS), eikä niitä lähetetä Palloliitolle.
+SHEET_HEADERS = [
+    "Pvm",
+    "Seura",
+    "Testaaja",
+    "Testaajan sähköposti",
+    "Metodi",
+    "PalloID",
+    "Pelioikeus",
+    "Mittaus voimassa asti",
+]
+NOT_STORED_TEXT = (
+    "pituus, paino, istumapituus, penkin korkeus, vanhempien pituudet, sukupuoli, syntymäaika ja "
+    "syntymäkuukausi, ikä, PHV-ikä / biologinen ikä sekä raja-arvo"
+)
+MEASUREMENT_HEADERS = [
+    "Pituus ka (cm)",
+    "Paino ka (kg)",
+    "Istumapituus ka (cm)",
+    "Penkin korkeus (cm)",
+]
+
+# Tietosuojaselosteen muokattavat osat.
+PRIVACY_HOSTING_TEXT = (
+    "Sovellus toimii Streamlit Community Cloud -palvelussa (Snowflake), jonka palvelimet sijaitsevat "
+    "Yhdysvalloissa, ja tulokset tallennetaan Google Sheets -taulukkoon."
+)
+PRIVACY_CONTACT_TEXT = ""  # esim. "Rekisterinpitäjä: Suomen Palloliitto, tietosuoja@palloliitto.fi"
 
 # Palloliiton ohje: biologisen iän mittaustulos on voimassa 6 kuukautta mittauspäivästä.
 VALIDITY_MONTHS = 6
@@ -1047,6 +1078,35 @@ def render_hero():
     )
 
 
+def render_privacy_notice():
+    """Selkeä kuvaus siitä, mitä tietoja käsitellään ja mitä tallennetaan."""
+    st.info(
+        "**Tietosuoja:** Pelaajan mittoja ei tallenneta Palloliitolle. Niiden perusteella vain lasketaan tulos. "
+        "Palloliiton järjestelmään tallennetaan vain PalloID, testaajan tiedot, tulos (KYLLÄ/EI) ja "
+        "tuloksen voimassaoloaika. **Seura tallentaa mittaukset ja tulokset itse** omiin järjestelmiinsä "
+        "tarkastusta varten (lataus tulosten jälkeen)."
+    )
+    with st.expander("Miten sovellus käsittelee tietoja?"):
+        stored = [h for h in SHEET_HEADERS]
+        st.markdown(
+            "**Mihin mittoja käytetään.** Antamasi mitat lähetetään sovellukselle vain tuloksen laskemista varten. "
+            "Laskenta tehdään palvelimella, joten mitat ovat siellä käsiteltävinä laskennan ajan, mutta sovellus ei "
+            "tallenna niitä Palloliiton taulukkoon eikä muualle."
+        )
+        st.markdown("**Mitä Palloliitolle tallennetaan.** " + ", ".join(stored) + ".")
+        st.markdown("**Mitä ei tallenneta.** " + NOT_STORED_TEXT[:1].upper() + NOT_STORED_TEXT[1:] + ".")
+        st.markdown(
+            "**Seuran oma tallennus.** Seura vastaa mittaustietojen ja laskennan tulosten säilyttämisestä omissa "
+            "järjestelmissään Palloliiton ohjeen mukaan, ja Palloliitto voi pyytää ne seuralta tarkastusta varten. "
+            "Jokaisen tuloksen jälkeen voi ladata tiedoston, jossa mitat ja laskennan tulokset ovat mukana. "
+            "Tiedosto muodostetaan vain sinun istunnossasi, eikä Palloliitto saa sitä. Sovellus ei säilytä "
+            "tiedostoa, joten lataa se heti."
+        )
+        st.markdown("**Missä tiedot ovat.** " + PRIVACY_HOSTING_TEXT)
+        if PRIVACY_CONTACT_TEXT:
+            st.markdown(PRIVACY_CONTACT_TEXT)
+
+
 def render_history():
     """Seuran omat tulokset: istunnon mittaukset ladattavana tiedostona."""
     history = st.session_state.get("history", [])
@@ -1078,6 +1138,8 @@ def main():
         "automaattisesti. Tulos ilmoitetaan samalla Palloliitolle, ja seura voi ladata omat tuloksensa "
         "sivun alalaidasta."
     )
+
+    render_privacy_notice()
 
     test_type = st.radio(
         "Valitse testausmenetelmä:",
@@ -1265,7 +1327,7 @@ def main():
                         value = "'" + value  # heittomerkki säilyttää etunollat tekstinä
                     row_to_save.append(sheet_safe(value))
 
-                record_key = tuple(str(record[h]) for h in SHEET_HEADERS)
+                record_key = tuple(str(record[h]) for h in FULL_HEADERS)
                 sent_keys = st.session_state.setdefault("sent_keys", set())
                 already_sent = record_key in sent_keys
                 ok = True
@@ -1297,6 +1359,20 @@ def main():
                     )
                 else:
                     st.caption("Pelioikeutta ei synny tämän mittauksen perusteella, joten voimassaoloaikaa ei ole.")
+
+                st.warning(
+                    "**Tallenna mittaukset ja tulos seurassa nyt.** Palloliitto ei tallenna pelaajan mittoja, "
+                    "eikä sovellus säilytä niitä. Seura vastaa mittaustietojen säilyttämisestä, ja Palloliitto voi "
+                    "pyytää ne seuralta tarkastusta varten. Lataa tiedosto ja tallenna se seuran järjestelmään."
+                )
+                record_csv = pd.DataFrame([record]).to_csv(index=False, sep=";").encode("utf-8-sig")
+                st.download_button(
+                    "Lataa tämän mittauksen tiedot (CSV)",
+                    data=record_csv,
+                    file_name=f"palloliitto_bio_{pallo_id}_{dom.isoformat()}.csv",
+                    mime="text/csv",
+                    key=f"dl_{pallo_id}_{dom.isoformat()}_{len(sent_keys)}",
+                )
 
                 if not already_sent:
                     history = st.session_state.setdefault("history", [])
