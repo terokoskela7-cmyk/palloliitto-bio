@@ -672,6 +672,17 @@ def bio_timing(age_offset):
     return "ON-TIME"
 
 
+def kr_age_group(dob, dom):
+    """Khamis-Roche-ikäryhmä syntymävuoden mukaan: mittausvuosi − syntymävuosi (esim. 2012 → 14 v vuonna 2026)."""
+    group = dom.year - dob.year
+    if group not in (13, 14, 15):
+        raise ValueError(
+            f"Khamis-Roche-raja-arvot on määritetty ikäryhmille 13–15 v. Syntymävuosi {dob.year} ja "
+            f"mittausvuosi {dom.year} antaisivat ikäryhmän {group} v, joten sääntöä ei voi tarkistaa tällä taulukolla."
+        )
+    return group
+
+
 def calc_khamis_roche(gender, dob, dom, height_cm, weight_kg, mum_cm, dad_cm, age_group):
     """Khamis-Roche: PAH, %PAH, biologinen ikä ja sääntö (Excel: BOYS / GIRLS)."""
     age = yearfrac(dob, dom)
@@ -829,6 +840,7 @@ def render_mirwald_result(res, gender, pallo_id, month_name):
 
 def render_kr_result(res, pallo_id, age_group, month_name):
     st.success(f"Khamis-Roche-tulokset laskettu PalloID:lle {pallo_id}:")
+    st.caption(f"Vertailuryhmä: {age_group}-vuotiaat (määräytyy syntymävuoden ja mittausvuoden mukaan).")
     r1, r2, r3 = st.columns(3)
     r1.metric("Kronologinen ikä", f"{res['age']:.2f} v")
     r2.metric("Biologinen ikä", f"{res['bio_age']:.1f} v")
@@ -1150,7 +1162,10 @@ def main():
                 dad_height = st.number_input(
                     "Isän pituus (cm)", min_value=140.0, max_value=220.0, value=180.0, step=0.5
                 )
-            kr_group = st.selectbox("Ikäryhmä (Khamis-Roche)", [13, 14, 15])
+            st.caption(
+                "Ikäryhmä määräytyy automaattisesti: mittausvuosi − syntymävuosi "
+                "(esim. vuonna 2026 syntynyt 2012 → 14 v)."
+            )
 
         submitted = st.form_submit_button("Laske ja tarkista pelioikeus")
 
@@ -1181,6 +1196,7 @@ def main():
                     res = calc_mirwald(gender, dob, dom, height, weight, sitting)
                     res["bench"] = bench_height
                 else:
+                    kr_group = kr_age_group(dob, dom)
                     res = calc_khamis_roche(gender, dob, dom, height, weight, mum_height, dad_height, kr_group)
             except ValueError as err:
                 st.error(str(err))
